@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files
+*.csv
+data.adult.csv
+
+# Notebooks
+*.ipynb
+HW_3_DA_Soc.ipynb
+
+# Model files (keep only essential)
+# We keep: best_model.pkl, encoder.pkl, scaler.pkl, features_info.pkl, categorical_options.pkl
+categorical_features.pkl
+numeric_features.pkl
+onehot_encoder.pkl
+feature_names.pkl
+
+# Duplicate app files
+app_again.py
+app_full.py
+check_model.py
