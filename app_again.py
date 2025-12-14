@@ -9,6 +9,27 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+import sys
+import traceback
+
+def main():
+    # Весь ваш текущий код app.py здесь
+    # ...
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        st.error("🚨 Критическая ошибка при запуске приложения")
+        st.error(f"Ошибка: {str(e)}")
+        st.code(traceback.format_exc(), language="python")
+        
+        # Покажем информацию об окружении
+        import os
+        st.write("### Информация об окружении:")
+        st.write(f"Текущая директория: {os.getcwd()}")
+        st.write(f"Содержимое директории: {os.listdir('.')}")
+
 # =============================================
 # СЛОВАРИ ПЕРЕВОДА
 # =============================================
@@ -146,6 +167,8 @@ st.markdown("""
 @st.cache_resource
 def load_resources():
     """Загрузка всех необходимых ресурсов"""
+    import os
+    
     resources = {
         'model': None,
         'scaler': None,
@@ -157,44 +180,71 @@ def load_resources():
     }
     
     try:
-        # Загружаем модель
-        resources['model'] = joblib.load('best_model.pkl')
-        resources['message'] += "✅ Модель загружена\n"
+        # Выводим отладочную информацию
+        current_dir = os.getcwd()
+        st.sidebar.write(f"📁 Текущая директория: {current_dir}")
         
-        # Загружаем скейлер
-        resources['scaler'] = joblib.load('scaler.pkl')
-        resources['message'] += "✅ Скейлер загружен\n"
+        # Список всех файлов
+        all_files = os.listdir('.')
+        st.sidebar.write(f"📋 Все файлы: {all_files}")
         
-        # Загружаем энкодер
-        resources['encoder'] = joblib.load('encoder.pkl')
-        resources['message'] += "✅ Энкодер загружен\n"
+        # Проверяем каждый файл
+        required_files = [
+            'best_model.pkl',
+            'scaler.pkl', 
+            'encoder.pkl',
+            'features_info.pkl',
+            'categorical_options.pkl'
+        ]
         
-        # Загружаем информацию о признаках
-        resources['features_info'] = joblib.load('features_info.pkl')
-        resources['message'] += "✅ Информация о признаках загружена\n"
-        
-        # Загружаем возможные значения категориальных признаков
-        resources['categorical_options'] = joblib.load('categorical_options.pkl')
-        resources['message'] += "✅ Возможные значения категорий загружены\n"
-        
-        # Фильтруем значения, которые есть в обучающих данных
-        # и создаем русские версии
-        resources['categorical_options_ru'] = {}
-        
-        for category, values in resources['categorical_options'].items():
-            if category in TRANSLATION_DICT:
-                # Фильтруем только те значения, которые есть в словаре перевода
-                filtered_values = [v for v in values if v in TRANSLATION_DICT[category]]
-                # Создаем русские варианты
-                translated_values = [TRANSLATION_DICT[category][v] for v in filtered_values]
-                resources['categorical_options_ru'][category] = translated_values
+        for file in required_files:
+            file_path = os.path.join('.', file)
+            if os.path.exists(file_path):
+                size = os.path.getsize(file_path)
+                st.sidebar.write(f"✅ {file}: {size:,} байт")
             else:
-                resources['categorical_options_ru'][category] = values
+                st.sidebar.write(f"❌ {file}: НЕ НАЙДЕН")
+        
+        # Загружаем файлы по одному с обработкой ошибок
+        try:
+            resources['model'] = joblib.load('best_model.pkl')
+            resources['message'] += "✅ Модель загружена\n"
+        except Exception as e:
+            resources['message'] += f"❌ Ошибка загрузки модели: {str(e)[:100]}\n"
+            return resources
+        
+        try:
+            resources['scaler'] = joblib.load('scaler.pkl')
+            resources['message'] += "✅ Скейлер загружен\n"
+        except Exception as e:
+            resources['message'] += f"❌ Ошибка загрузки скейлера: {str(e)[:100]}\n"
+            return resources
+        
+        try:
+            resources['encoder'] = joblib.load('encoder.pkl')
+            resources['message'] += "✅ Энкодер загружен\n"
+        except Exception as e:
+            resources['message'] += f"❌ Ошибка загрузки энкодера: {str(e)[:100]}\n"
+            return resources
+        
+        try:
+            resources['features_info'] = joblib.load('features_info.pkl')
+            resources['message'] += "✅ Информация о признаках загружена\n"
+        except Exception as e:
+            resources['message'] += f"❌ Ошибка загрузки features_info: {str(e)[:100]}\n"
+            return resources
+        
+        try:
+            resources['categorical_options'] = joblib.load('categorical_options.pkl')
+            resources['message'] += "✅ Возможные значения категорий загружены\n"
+        except Exception as e:
+            resources['message'] += f"❌ Ошибка загрузки categorical_options: {str(e)[:100]}\n"
+            return resources
         
         resources['loaded'] = True
         
     except Exception as e:
-        resources['message'] = f"❌ Ошибка загрузки: {str(e)[:100]}"
+        resources['message'] = f"❌ Критическая ошибка: {str(e)}"
     
     return resources
 
