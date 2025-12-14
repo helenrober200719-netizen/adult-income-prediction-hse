@@ -51,6 +51,5 @@ onehot_encoder.pkl
 feature_names.pkl
 
 # Duplicate app files
-app_again.py
 app_full.py
 check_model.py
