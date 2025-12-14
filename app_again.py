@@ -146,6 +146,7 @@ st.markdown("""
 @st.cache_resource
 def load_resources():
     """Загрузка всех необходимых ресурсов"""
+    import os
     resources = {
         'model': None,
         'scaler': None,
@@ -157,44 +158,71 @@ def load_resources():
     }
     
     try:
+        # Выводим текущую директорию и список файлов
+        current_dir = os.getcwd()
+        files = os.listdir(current_dir)
+        
+        # Для отладки выведем в sidebar
+        st.sidebar.write("Текущая директория:", current_dir)
+        st.sidebar.write("Файлы в директории:", files)
+        
+        # Проверим наличие каждого необходимого файла
+        required_files = ['best_model.pkl', 'scaler.pkl', 'encoder.pkl', 
+                         'features_info.pkl', 'categorical_options.pkl']
+        
+        for file in required_files:
+            if file in files:
+                st.sidebar.write(f"✅ {file} найден")
+            else:
+                st.sidebar.write(f"❌ {file} не найден")
+        
         # Загружаем модель
-        resources['model'] = joblib.load('best_model.pkl')
-        resources['message'] += "✅ Модель загружена\n"
+        if 'best_model.pkl' in files:
+            resources['model'] = joblib.load('best_model.pkl')
+            resources['message'] += "✅ Модель загружена\n"
+        else:
+            resources['message'] += "❌ best_model.pkl не найден\n"
+            return resources
         
         # Загружаем скейлер
-        resources['scaler'] = joblib.load('scaler.pkl')
-        resources['message'] += "✅ Скейлер загружен\n"
+        if 'scaler.pkl' in files:
+            resources['scaler'] = joblib.load('scaler.pkl')
+            resources['message'] += "✅ Скейлер загружен\n"
+        else:
+            resources['message'] += "❌ scaler.pkl не найден\n"
+            return resources
         
         # Загружаем энкодер
-        resources['encoder'] = joblib.load('encoder.pkl')
-        resources['message'] += "✅ Энкодер загружен\n"
+        if 'encoder.pkl' in files:
+            resources['encoder'] = joblib.load('encoder.pkl')
+            resources['message'] += "✅ Энкодер загружен\n"
+        else:
+            resources['message'] += "❌ encoder.pkl не найден\n"
+            return resources
         
         # Загружаем информацию о признаках
-        resources['features_info'] = joblib.load('features_info.pkl')
-        resources['message'] += "✅ Информация о признаках загружена\n"
+        if 'features_info.pkl' in files:
+            resources['features_info'] = joblib.load('features_info.pkl')
+            resources['message'] += "✅ Информация о признаках загружена\n"
+        else:
+            resources['message'] += "❌ features_info.pkl не найден\n"
+            return resources
         
         # Загружаем возможные значения категориальных признаков
-        resources['categorical_options'] = joblib.load('categorical_options.pkl')
-        resources['message'] += "✅ Возможные значения категорий загружены\n"
-        
-        # Фильтруем значения, которые есть в обучающих данных
-        # и создаем русские версии
-        resources['categorical_options_ru'] = {}
-        
-        for category, values in resources['categorical_options'].items():
-            if category in TRANSLATION_DICT:
-                # Фильтруем только те значения, которые есть в словаре перевода
-                filtered_values = [v for v in values if v in TRANSLATION_DICT[category]]
-                # Создаем русские варианты
-                translated_values = [TRANSLATION_DICT[category][v] for v in filtered_values]
-                resources['categorical_options_ru'][category] = translated_values
-            else:
-                resources['categorical_options_ru'][category] = values
+        if 'categorical_options.pkl' in files:
+            resources['categorical_options'] = joblib.load('categorical_options.pkl')
+            resources['message'] += "✅ Возможные значения категорий загружены\n"
+        else:
+            resources['message'] += "❌ categorical_options.pkl не найден\n"
+            return resources
         
         resources['loaded'] = True
         
     except Exception as e:
-        resources['message'] = f"❌ Ошибка загрузки: {str(e)[:100]}"
+        resources['message'] = f"❌ Ошибка загрузки: {str(e)}"
+        # Выведем полную ошибку для отладки
+        import traceback
+        st.sidebar.write(traceback.format_exc())
     
     return resources
 
