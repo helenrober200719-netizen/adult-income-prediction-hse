@@ -1,20 +1,135 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import matplotlib.pyplot as plt
-import seaborn as sns
-import pickle
-from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+# =============================================
+# СЛОВАРИ ПЕРЕВОДА
+# =============================================
+TRANSLATION_DICT = {
+    'sex': {
+        'Male': 'Мужской',
+        'Female': 'Женский'
+    },
+    'race': {
+        'White': 'Белый',
+        'Black': 'Черный',
+        'Asian-Pac-Islander': 'Азиатско-Тихоокеанский островитянин',
+        'Amer-Indian-Eskimo': 'Индеец/Эскимос',
+        'Other': 'Другой'
+    },
+    'education': {
+        'Bachelors': 'Бакалавр',
+        'Some-college': 'Неоконченное высшее',
+        '11th': '11 класс',
+        'HS-grad': 'Выпускник школы',
+        'Prof-school': 'Профессиональная школа',
+        'Assoc-acdm': 'Академическое (2 года)',
+        'Assoc-voc': 'Профессионально-техническое',
+        '9th': '9 класс',
+        '7th-8th': '7-8 классы',
+        '12th': '12 класс',
+        'Masters': 'Магистр',
+        '1st-4th': '1-4 классы',
+        '10th': '10 класс',
+        'Doctorate': 'Доктор',
+        '5th-6th': '5-6 классы',
+        'Preschool': 'Дошкольное'
+    },
+    'marital-status': {
+        'Never-married': 'Никогда не женат/замужем',
+        'Married-civ-spouse': 'Женат/замужем (гражданский брак)',
+        'Divorced': 'В разводе',
+        'Married-spouse-absent': 'Женат/замужем (супруг отсутствует)',
+        'Separated': 'Разведен/разведена',
+        'Married-AF-spouse': 'Женат/замужем (военнослужащий)',
+        'Widowed': 'Вдовец/вдова'
+    },
+    'relationship': {
+        'Not-in-family': 'Не в семье',
+        'Husband': 'Муж',
+        'Wife': 'Жена',
+        'Own-child': 'Собственный ребенок',
+        'Unmarried': 'Не женат/не замужем',
+        'Other-relative': 'Другой родственник'
+    },
+    'workclass': {
+        'Private': 'Частный',
+        'Self-emp-not-inc': 'Самостоятельный (не инкорпорированный)',
+        'Self-emp-inc': 'Самостоятельный (инкорпорированный)',
+        'Federal-gov': 'Федеральное правительство',
+        'Local-gov': 'Местное правительство',
+        'State-gov': 'Правительство штата',
+        'Without-pay': 'Без оплаты'
+    },
+    'occupation': {
+        'Prof-specialty': 'Профессиональная специализация',
+        'Craft-repair': 'Ремесло-ремонт',
+        'Exec-managerial': 'Управленческий',
+        'Adm-clerical': 'Административно-канцелярский',
+        'Sales': 'Продажи',
+        'Other-service': 'Другие услуги',
+        'Machine-op-inspct': 'Машинные операторы-инспекторы',
+        'Transport-moving': 'Транспортировка-переезд',
+        'Handlers-cleaners': 'Грузчики-уборщики',
+        'Farming-fishing': 'Сельское хозяйство-рыболовство',
+        'Tech-support': 'Техподдержка',
+        'Protective-serv': 'Охранные услуги',
+        'Priv-house-serv': 'Частные домашние услуги',
+        'Armed-Forces': 'Вооруженные силы'
+    }
+}
+
+# =============================================
+# КОНФИГУРАЦИЯ СТРАНИЦЫ
+# =============================================
+st.set_page_config(
+    page_title="💰 Прогноз Дохода >$50K",
+    page_icon="💵",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Стилизация
+st.markdown("""
+<style>
+    .stProgress > div > div > div > div {
+        background-color: #4ECDC4;
+    }
+    div[data-testid="metric-container"] {
+        background-color: #f0f2f6;
+        padding: 5% 5% 5% 10%;
+        border-radius: 10px;
+        border-left: 0.5rem solid #4ECDC4 !important;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    }
+    .stButton > button {
+        background-color: #4ECDC4;
+        color: white;
+        font-weight: bold;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        transition: all 0.3s;
+    }
+    .stButton > button:hover {
+        background-color: #3DB7AE;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# =============================================
+# ФУНКЦИИ ДЕМО-РЕЖИМА
+# =============================================
 @st.cache_resource
-def load_resources():
-    """Загрузка или создание всех необходимых ресурсов. Создает демо-модель на лету."""
+def load_demo_resources():
+    """Создание демо-ресурсов в памяти"""
     import numpy as np
     from sklearn.preprocessing import StandardScaler, OneHotEncoder
-    import pandas as pd
     
     resources = {
         'model': None,
@@ -22,105 +137,488 @@ def load_resources():
         'encoder': None,
         'features_info': None,
         'categorical_options': None,
+        'categorical_options_ru': None,
         'loaded': False,
         'message': '',
-        'demo_mode': True  # Флаг, что работает демо-режим
+        'demo_mode': True
     }
     
     try:
-        # --- 1. СОЗДАЁМ ДЕМО-МОДЕЛЬ (основная логика) ---
-        class IncomeDemoModel:
-            """Простая модель для демонстрации логики приложения."""
+        # Создаем демо-модель
+        class DemoModel:
+            def __init__(self):
+                self.random_seed = 42
+            
             def predict(self, X):
-                # X - это уже подготовленные данные (масштабированные, закодированные)
-                # Для демо просто возвращаем случайные 0 или 1
-                np.random.seed(42) # Для воспроизводимости
-                return np.random.randint(0, 2, X.shape[0])
+                np.random.seed(self.random_seed)
+                # Простая логика: возраст > 40 и образование > 12 -> высокий доход
+                predictions = []
+                for sample in X:
+                    if len(sample) >= 5:
+                        age = sample[0]
+                        education = sample[4]
+                        if age > 40 and education > 12:
+                            predictions.append(1)
+                        else:
+                            predictions.append(0)
+                    else:
+                        predictions.append(0)
+                return np.array(predictions)
             
             def predict_proba(self, X):
-                # Возвращаем "вероятности". Для реалистичности сделаем их зависимыми от первого признака (age)
-                np.random.seed(42)
-                n_samples = X.shape[0]
-                # Базовый шанс высокого дохода - 30%
-                base_prob = 0.3
-                # Немного увеличим шанс, если "возраст" (первый столбец в масштабированных данных) высокий
-                if n_samples > 0 and X.shape[1] > 0:
-                    # Предполагаем, что age - первый признак. Нормализуем его влияние.
-                    age_effect = X[:, 0] * 0.1 if X.shape[1] > 0 else 0
-                    age_effect = np.clip(age_effect, -0.3, 0.3)
-                    base_prob += age_effect
+                np.random.seed(self.random_seed)
+                prob_high = []
+                for sample in X:
+                    base_prob = 0.3
+                    if len(sample) >= 5:
+                        age = sample[0]
+                        education = sample[4]
+                        if age > 40:
+                            base_prob += 0.3
+                        if education > 12:
+                            base_prob += 0.3
+                    base_prob = min(base_prob, 0.95)
+                    base_prob = max(base_prob, 0.05)
+                    prob_high.append(base_prob)
                 
-                prob_high = np.clip(base_prob + np.random.normal(0, 0.1, n_samples), 0.05, 0.95)
-                prob_high = prob_high.reshape(-1, 1)
+                prob_high = np.array(prob_high).reshape(-1, 1)
                 return np.hstack([1 - prob_high, prob_high])
         
-        # --- 2. СОЗДАЁМ И "ОБУЧАЕМ" ПРЕПРОЦЕССОРЫ ---
-        # Создаём скейлер (просто пустой, для совместимости интерфейса)
-        demo_scaler = StandardScaler()
-        # Для работы .transform() скейлеру нужно быть "обученным" на каких-то данных.
-        # Создадим синтетические данные для "обучения".
-        dummy_numeric_data = np.array([[30, 200000, 9, 0, 0, 40]])  # [age, fnlwgt, education-num, capital-gain, capital-loss, hours-per-week]
-        demo_scaler.fit(dummy_numeric_data)
+        # Создаем и "обучаем" скейлер на синтетических данных
+        scaler = StandardScaler()
+        dummy_numeric = np.array([
+            [30, 200000, 9, 0, 0, 40],
+            [50, 300000, 13, 10000, 0, 50],
+            [25, 150000, 10, 0, 1000, 35]
+        ])
+        scaler.fit(dummy_numeric)
         
-        # Создаём энкодер
-        demo_encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
-        # Создаём синтетические категориальные данные для "обучения" энкодера
-        dummy_cat_data = pd.DataFrame({
-            'workclass': ['Private'],
-            'education': ['HS-grad'],
-            'marital-status': ['Never-married'],
-            'occupation': ['Prof-specialty'],
-            'relationship': ['Not-in-family'],
-            'race': ['White'],
-            'sex': ['Male']
+        # Создаем и "обучаем" энкодер
+        encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+        dummy_categorical = pd.DataFrame({
+            'workclass': ['Private', 'Federal-gov', 'Self-emp-not-inc'],
+            'education': ['Bachelors', 'Masters', 'HS-grad'],
+            'marital-status': ['Never-married', 'Married-civ-spouse', 'Divorced'],
+            'occupation': ['Exec-managerial', 'Prof-specialty', 'Adm-clerical'],
+            'relationship': ['Not-in-family', 'Husband', 'Own-child'],
+            'race': ['White', 'Black', 'Asian-Pac-Islander'],
+            'sex': ['Male', 'Female', 'Male']
         })
-        demo_encoder.fit(dummy_cat_data)
+        encoder.fit(dummy_categorical)
         
-        # --- 3. ЗАПОЛНЯЕМ МЕТАДАННЫЕ (точно как в интерфейсе) ---
+        # Метаданные о признаках
         resources['features_info'] = {
             'numeric_features': ['age', 'fnlwgt', 'education-num', 'capital-gain', 'capital-loss', 'hours-per-week'],
             'categorical_features': ['workclass', 'education', 'marital-status', 'occupation', 'relationship', 'race', 'sex'],
-            'all_features': []  # Можно оставить пустым или сгенерировать
+            'all_features': []
         }
         
+        # Категориальные значения (английские)
         resources['categorical_options'] = {
             'sex': ['Male', 'Female'],
             'race': ['White', 'Black', 'Asian-Pac-Islander', 'Amer-Indian-Eskimo', 'Other'],
-            'education': ['Bachelors', 'Some-college', 'HS-grad', 'Masters', 'Assoc-voc', 'Assoc-acdm', '11th', '9th', '7th-8th', '12th', '10th', 'Doctorate', '5th-6th', '1st-4th', 'Preschool'],
-            'marital-status': ['Never-married', 'Married-civ-spouse', 'Divorced', 'Married-spouse-absent', 'Separated', 'Married-AF-spouse', 'Widowed'],
-            'relationship': ['Not-in-family', 'Husband', 'Wife', 'Own-child', 'Unmarried', 'Other-relative'],
-            'workclass': ['Private', 'Self-emp-not-inc', 'Self-emp-inc', 'Federal-gov', 'Local-gov', 'State-gov', 'Without-pay'],
-            'occupation': ['Prof-specialty', 'Craft-repair', 'Exec-managerial', 'Adm-clerical', 'Sales', 'Other-service', 'Machine-op-inspct', 'Transport-moving', 'Handlers-cleaners', 'Farming-fishing', 'Tech-support', 'Protective-serv', 'Priv-house-serv', 'Armed-Forces']
+            'education': ['Bachelors', 'Some-college', 'HS-grad', 'Masters', 'Assoc-voc', 'Assoc-acdm'],
+            'marital-status': ['Never-married', 'Married-civ-spouse', 'Divorced', 'Separated'],
+            'relationship': ['Not-in-family', 'Husband', 'Wife', 'Own-child', 'Unmarried'],
+            'workclass': ['Private', 'Self-emp-not-inc', 'Federal-gov', 'Local-gov', 'State-gov'],
+            'occupation': ['Prof-specialty', 'Craft-repair', 'Exec-managerial', 'Adm-clerical', 'Sales']
         }
         
-        # --- 4. СОЗДАЁМ РУССКИЕ ВЕРСИИ КАТЕГОРИЙ (categorical_options_ru) ---
-        # Словарь перевода (убедитесь, что он объявлен глобально в вашем файле)
-        TRANSLATION_DICT = {
-            'sex': {'Male': 'Мужской', 'Female': 'Женский'},
-            'race': {'White': 'Белый', 'Black': 'Черный', 'Asian-Pac-Islander': 'Азиатско-Тихоокеанский островитянин', 'Amer-Indian-Eskimo': 'Индеец/Эскимос', 'Other': 'Другой'},
-            'education': {'Bachelors': 'Бакалавр', 'Some-college': 'Неоконченное высшее', 'HS-grad': 'Выпускник школы', 'Masters': 'Магистр', 'Assoc-voc': 'Профессионально-техническое', 'Assoc-acdm': 'Академическое (2 года)', '11th': '11 класс', '9th': '9 класс', '7th-8th': '7-8 классы', '12th': '12 класс', '10th': '10 класс', 'Doctorate': 'Доктор', '5th-6th': '5-6 классы', '1st-4th': '1-4 классы', 'Preschool': 'Дошкольное'},
-            'marital-status': {'Never-married': 'Никогда не женат/замужем', 'Married-civ-spouse': 'Женат/замужем (гражданский брак)', 'Divorced': 'В разводе', 'Married-spouse-absent': 'Женат/замужем (супруг отсутствует)', 'Separated': 'Разведен/разведена', 'Married-AF-spouse': 'Женат/замужем (военнослужащий)', 'Widowed': 'Вдовец/вдова'},
-            'relationship': {'Not-in-family': 'Не в семье', 'Husband': 'Муж', 'Wife': 'Жена', 'Own-child': 'Собственный ребенок', 'Unmarried': 'Не женат/не замужем', 'Other-relative': 'Другой родственник'},
-            'workclass': {'Private': 'Частный', 'Self-emp-not-inc': 'Самостоятельный (не инкорпорированный)', 'Self-emp-inc': 'Самостоятельный (инкорпорированный)', 'Federal-gov': 'Федеральное правительство', 'Local-gov': 'Местное правительство', 'State-gov': 'Правительство штата', 'Without-pay': 'Без оплаты'},
-            'occupation': {'Prof-specialty': 'Профессиональная специализация', 'Craft-repair': 'Ремесло-ремонт', 'Exec-managerial': 'Управленческий', 'Adm-clerical': 'Административно-канцелярский', 'Sales': 'Продажи', 'Other-service': 'Другие услуги', 'Machine-op-inspct': 'Машинные операторы-инспекторы', 'Transport-moving': 'Транспортировка-переезд', 'Handlers-cleaners': 'Грузчики-уборщики', 'Farming-fishing': 'Сельское хозяйство-рыболовство', 'Tech-support': 'Техподдержка', 'Protective-serv': 'Охранные услуги', 'Priv-house-serv': 'Частные домашние услуги', 'Armed-Forces': 'Вооруженные силы'}
-        }
-        
+        # Создаем русские версии
         resources['categorical_options_ru'] = {}
         for category, eng_values in resources['categorical_options'].items():
             if category in TRANSLATION_DICT:
-                rus_values = [TRANSLATION_DICT[category].get(val, val) for val in eng_values]
+                rus_values = []
+                for eng_val in eng_values:
+                    if eng_val in TRANSLATION_DICT[category]:
+                        rus_values.append(TRANSLATION_DICT[category][eng_val])
+                    else:
+                        rus_values.append(eng_val)
                 resources['categorical_options_ru'][category] = rus_values
             else:
                 resources['categorical_options_ru'][category] = eng_values
         
-        # --- 5. ПРИСВАИВАЕМ СОЗДАННЫЕ ОБЪЕКТЫ ---
-        resources['model'] = IncomeDemoModel()
-        resources['scaler'] = demo_scaler
-        resources['encoder'] = demo_encoder
+        # Присваиваем объекты
+        resources['model'] = DemoModel()
+        resources['scaler'] = scaler
+        resources['encoder'] = encoder
         resources['loaded'] = True
-        resources['message'] = "✅ Все ресурсы созданы в демо-режиме. Приложение готово к работе.\n"
+        resources['message'] = "✅ Демо-ресурсы успешно созданы\n"
         
     except Exception as e:
-        resources['message'] = f"❌ Критическая ошибка при создании демо-ресурсов: {str(e)}"
+        resources['message'] = f"❌ Ошибка создания демо-ресурсов: {str(e)}"
     
     return resources
+
+# =============================================
+# ФУНКЦИЯ ПОДГОТОВКИ ДАННЫХ
+# =============================================
+def prepare_demo_input(input_dict, features_info, encoder, scaler):
+    """Подготовка введенных пользователем данных для модели"""
+    # Создаем DataFrame
+    df = pd.DataFrame([input_dict])
+    
+    # Разделяем признаки
+    numeric_features = features_info['numeric_features']
+    categorical_features = features_info['categorical_features']
+    
+    # Обрабатываем категориальные признаки (преобразуем русские->английские)
+    if categorical_features:
+        cat_data = df[categorical_features].copy()
+        
+        # Создаем обратный словарь для перевода
+        reverse_translation = {}
+        for category, translations in TRANSLATION_DICT.items():
+            reverse_translation[category] = {v: k for k, v in translations.items()}
+        
+        # Переводим русские значения обратно в английские
+        for col in categorical_features:
+            if col in cat_data.columns:
+                for i, value in enumerate(cat_data[col]):
+                    if col in reverse_translation and value in reverse_translation[col]:
+                        cat_data.iloc[i, cat_data.columns.get_loc(col)] = reverse_translation[col][value]
+        
+        # Кодируем
+        try:
+            cat_encoded = encoder.transform(cat_data)
+            cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(categorical_features))
+        except:
+            # Если ошибка кодирования, создаем нулевую матрицу
+            cat_encoded_df = pd.DataFrame(np.zeros((1, len(encoder.get_feature_names_out(categorical_features)))),
+                                         columns=encoder.get_feature_names_out(categorical_features))
+    else:
+        cat_encoded_df = pd.DataFrame()
+    
+    # Обрабатываем числовые признаки
+    if numeric_features:
+        num_data = df[numeric_features]
+        try:
+            num_scaled = scaler.transform(num_data)
+            num_scaled_df = pd.DataFrame(num_scaled, columns=numeric_features)
+        except:
+            # Если ошибка, используем исходные значения
+            num_scaled_df = num_data.copy()
+    else:
+        num_scaled_df = pd.DataFrame()
+    
+    # Объединяем
+    if not cat_encoded_df.empty and not num_scaled_df.empty:
+        final_df = pd.concat([num_scaled_df, cat_encoded_df], axis=1)
+    elif not cat_scaled_df.empty:
+        final_df = num_scaled_df
+    else:
+        final_df = cat_encoded_df
+    
+    return final_df
+
+def create_progress_bar(probability):
+    """Создает визуализацию вероятности"""
+    fig, ax = plt.subplots(figsize=(10, 1))
+    ax.barh([0], [probability], color='#4ECDC4', height=0.5)
+    ax.barh([0], [1 - probability], left=[probability], color='#FF6B6B', height=0.5)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-0.5, 0.5)
+    ax.axis('off')
+    
+    # Текст
+    ax.text(probability/2, 0, f'Вероятность ≤$50K: {1-probability:.1%}', 
+            ha='center', va='center', color='white', fontweight='bold', fontsize=10)
+    ax.text(probability + (1-probability)/2, 0, f'Вероятность >$50K: {probability:.1%}', 
+            ha='center', va='center', color='white', fontweight='bold', fontsize=10)
+    
+    return fig
+
+# =============================================
+# ЗАГРУЗКА РЕСУРСОВ
+# =============================================
+resources = load_demo_resources()
+
+# =============================================
+# ЗАГОЛОВОК
+# =============================================
+st.title("💰 Прогнозирование Годового Дохода")
+st.markdown("""
+**Предсказание, превысит ли годовой доход человека порог $50,000**
+
+*Демо-версия приложения с использованием синтетической модели*
+""")
+
+# =============================================
+# БОКОВАЯ ПАНЕЛЬ
+# =============================================
+with st.sidebar:
+    st.header("📊 Информация о системе")
+    
+    if resources['loaded']:
+        st.success("✅ Демо-ресурсы созданы")
+        st.info("🟡 Работает в демо-режиме")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Признаков", len(resources['features_info']['numeric_features']) + 
+                     len(resources['features_info']['categorical_features']))
+        with col2:
+            st.metric("Модель", "Demo Model")
+        
+        with st.expander("ℹ️ Подробности"):
+            st.write("**Числовые признаки:**")
+            for feat in resources['features_info']['numeric_features']:
+                st.write(f"• {feat}")
+            
+            st.write("**Категориальные признаки:**")
+            for feat in resources['features_info']['categorical_features']:
+                st.write(f"• {feat}")
+    else:
+        st.error("⚠️ Ресурсы не созданы")
+        st.write(resources['message'])
+    
+    st.markdown("---")
+    st.caption("Версия 2.0 • Демо-режим")
+
+# =============================================
+# ОСНОВНОЕ ПРИЛОЖЕНИЕ
+# =============================================
+if not resources['loaded']:
+    st.error("Не удалось создать демо-ресурсы. Пожалуйста, проверьте код.")
+    st.stop()
+
+# Получаем ресурсы
+model = resources['model']
+scaler = resources['scaler']
+encoder = resources['encoder']
+features_info = resources['features_info']
+cat_options_ru = resources['categorical_options_ru']
+
+# Создаем вкладки
+tab1, tab2 = st.tabs(["🎯 Прогноз", "📈 Информация"])
+
+with tab1:
+    st.header("🎯 Введите параметры для прогноза")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.subheader("👤 Демография")
+        age = st.slider("Возраст", 17, 90, 35)
+        
+        if 'sex' in cat_options_ru:
+            sex = st.selectbox("Пол", cat_options_ru['sex'])
+        else:
+            sex = st.selectbox("Пол", ['Мужской', 'Женский'])
+        
+        if 'race' in cat_options_ru:
+            race = st.selectbox("Раса", cat_options_ru['race'])
+        else:
+            race = st.selectbox("Раса", ['Белый', 'Черный', 'Другой'])
+    
+    with col2:
+        st.subheader("🎓 Образование и Работа")
+        
+        if 'education' in cat_options_ru:
+            education = st.selectbox("Образование", cat_options_ru['education'])
+        else:
+            education = st.selectbox("Образование", ['Бакалавр', 'Магистр', 'Выпускник школы'])
+        
+        if 'occupation' in cat_options_ru:
+            occupation = st.selectbox("Профессия", cat_options_ru['occupation'])
+        else:
+            occupation = st.selectbox("Профессия", ['Управленческий', 'Профессиональная специализация'])
+        
+        if 'workclass' in cat_options_ru:
+            workclass = st.selectbox("Рабочий класс", cat_options_ru['workclass'])
+        else:
+            workclass = st.selectbox("Рабочий класс", ['Частный', 'Федеральное правительство'])
+        
+        hours_per_week = st.slider("Часов в неделю", 1, 99, 40)
+    
+    with col3:
+        st.subheader("💼 Семья и Финансы")
+        
+        if 'marital-status' in cat_options_ru:
+            marital_status = st.selectbox("Семейное положение", cat_options_ru['marital-status'])
+        else:
+            marital_status = st.selectbox("Семейное положение", ['Никогда не женат/замужем', 'Женат/замужем'])
+        
+        if 'relationship' in cat_options_ru:
+            relationship = st.selectbox("Родственные отношения", cat_options_ru['relationship'])
+        else:
+            relationship = st.selectbox("Родственные отношения", ['Не в семье', 'Муж', 'Жена'])
+        
+        capital_gain = st.number_input("Прирост капитала ($)", 0, 100000, 0)
+        capital_loss = st.number_input("Потери капитала ($)", 0, 5000, 0)
+    
+    # Дополнительные параметры
+    st.subheader("📊 Дополнительные параметры")
+    col4, col5 = st.columns(2)
+    
+    with col4:
+        fnlwgt = st.number_input("Вес наблюдения (fnlwgt)", 
+                                min_value=10000, 
+                                max_value=500000, 
+                                value=189154)
+    
+    with col5:
+        education_num = st.slider("Годы образования (education-num)", 1, 16, 9)
+    
+    # Кнопка предсказания
+    predict_button = st.button("🚀 СДЕЛАТЬ ПРОГНОЗ", 
+                              type="primary", 
+                              use_container_width=True)
+    
+    if predict_button:
+        with st.spinner("🔍 Анализируем данные..."):
+            # Собираем все введенные данные
+            input_data = {
+                'age': age,
+                'workclass': workclass,
+                'fnlwgt': fnlwgt,
+                'education': education,
+                'education-num': education_num,
+                'marital-status': marital_status,
+                'occupation': occupation,
+                'relationship': relationship,
+                'race': race,
+                'sex': sex,
+                'capital-gain': capital_gain,
+                'capital-loss': capital_loss,
+                'hours-per-week': hours_per_week
+            }
+            
+            # Подготавливаем данные
+            try:
+                prepared_data = prepare_demo_input(input_data, features_info, encoder, scaler)
+                
+                # Делаем предсказание
+                prediction = model.predict(prepared_data)[0]
+                probabilities = model.predict_proba(prepared_data)[0]
+                
+                # Отображаем результаты
+                st.markdown("---")
+                st.header("📊 Результаты прогноза")
+                
+                # Основные метрики
+                col_result1, col_result2, col_result3 = st.columns(3)
+                
+                with col_result1:
+                    if prediction == 1:
+                        st.success(f"""
+                        ## ✅ ВЫСОКИЙ ДОХОД
+                        ### > $50,000/год
+                        """)
+                    else:
+                        st.info(f"""
+                        ## ⚠️ СРЕДНИЙ ДОХОД  
+                        ### ≤ $50,000/год
+                        """)
+                
+                with col_result2:
+                    prob_high = probabilities[1]
+                    st.metric(
+                        label="Вероятность высокого дохода",
+                        value=f"{prob_high:.1%}",
+                        delta=f"{prob_high - 0.5:+.1%}" if prob_high > 0.5 else None,
+                        delta_color="normal"
+                    )
+                
+                with col_result3:
+                    confidence = max(probabilities)
+                    st.metric(
+                        label="Уверенность модели",
+                        value=f"{confidence:.1%}",
+                        delta="Высокая" if confidence > 0.7 else ("Средняя" if confidence > 0.6 else "Низкая"),
+                        delta_color="normal"
+                    )
+                
+                # Визуализация
+                st.subheader("📈 Визуализация вероятностей")
+                st.pyplot(create_progress_bar(prob_high))
+                
+                # Детальная информация
+                with st.expander("📋 Детали прогноза", expanded=True):
+                    # Таблица с введенными данными
+                    input_df = pd.DataFrame([input_data])
+                    st.write("**Введенные параметры:**")
+                    st.dataframe(input_df.T.rename(columns={0: 'Значение'}), 
+                               use_container_width=True)
+                    
+                    # Таблица вероятностей
+                    prob_df = pd.DataFrame({
+                        'Класс': ['≤ $50K', '> $50K'],
+                        'Вероятность': probabilities,
+                        'Интерпретация': [
+                            'Средний или низкий доход',
+                            'Высокий доход (>$50K/год)'
+                        ]
+                    })
+                    st.write("**Распределение вероятностей:**")
+                    st.dataframe(prob_df, use_container_width=True, hide_index=True)
+            
+            except Exception as e:
+                st.error(f"❌ Ошибка при обработке данных: {str(e)}")
+
+with tab2:
+    st.header("📈 Информация о демо-режиме")
+    
+    st.info("""
+    **Это демо-версия приложения для прогнозирования дохода.**
+    
+    Функции:
+    - 🎯 **Интерактивный ввод параметров** с русским интерфейсом
+    - 📊 **Визуализация результатов** с вероятностями
+    - 🔍 **Детальный анализ** влияния факторов
+    - 💾 **Автоматическое создание модели** без загрузки файлов
+    
+    **Как это работает:**
+    1. Вы вводите параметры человека
+    2. Демо-модель анализирует введенные данные
+    3. На основе простых правил (возраст, образование) вычисляется вероятность
+    4. Результаты отображаются в наглядном виде
+    
+    **Технологии:**
+    - Python + Streamlit для интерфейса
+    - Scikit-learn для обработки данных
+    - Pandas + NumPy для вычислений
+    - Matplotlib для визуализации
+    """)
+    
+    # Примеры
+    st.subheader("📋 Примеры прогнозов")
+    
+    examples = [
+        {
+            "Описание": "👨‍💼 Успешный менеджер",
+            "Возраст": 45,
+            "Образование": "Магистр",
+            "Профессия": "Управленческий",
+            "Часы": 55,
+            "Прогноз модели": "> $50K",
+            "Вероятность": "85%"
+        },
+        {
+            "Описание": "👩‍🎓 Молодой специалист",
+            "Возраст": 25,
+            "Образование": "Бакалавр",
+            "Профессия": "Административно-канцелярский",
+            "Часы": 35,
+            "Прогноз модели": "≤ $50K",
+            "Вероятность": "65%"
+        }
+    ]
+    
+    for example in examples:
+        with st.expander(example["Описание"]):
+            st.write(f"**Возраст:** {example['Возраст']} лет")
+            st.write(f"**Образование:** {example['Образование']}")
+            st.write(f"**Профессия:** {example['Профессия']}")
+            st.write(f"**Часы работы:** {example['Часы']} ч/неделю")
+            
+            if example['Прогноз модели'] == "> $50K":
+                st.success(f"**Прогноз:** {example['Прогноз модели']} (вероятность: {example['Вероятность']})")
+            else:
+                st.info(f"**Прогноз:** {example['Прогноз модели']} (вероятность: {example['Вероятность']})")
+
+# =============================================
+# ФУТЕР
+# =============================================
+st.markdown("---")
+st.caption("📊 Демо-версия приложения для прогнозирования дохода • Streamlit + Scikit-learn")
