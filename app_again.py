@@ -9,6 +9,78 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
+@st.cache_resource
+def load_resources():
+    """Загрузка всех необходимых ресурсов с резервным созданием демо-объектов"""
+    import os
+    import numpy as np
+    from sklearn.preprocessing import StandardScaler, OneHotEncoder
+    
+    resources = {
+        'model': None,
+        'scaler': None,
+        'encoder': None,
+        'features_info': None,
+        'categorical_options': None,
+        'loaded': False,
+        'message': '',
+        'demo_mode': False
+    }
+    
+    # 1. Сначала пытаемся загрузить из файлов (ваш старый код может остаться здесь)
+    # ... (если файлы когда-нибудь заработают, они загрузятся тут)
+    
+    # 2. Если загрузка не удалась (а она не удастся) — создаём объекты сами
+    resources['demo_mode'] = True
+    st.sidebar.warning("⚠️ Загружена демо-версия модели для предсказания.")
+    
+    # Создаём простую модель-заглушку
+    class DemoModel:
+        """Простая модель для демонстрации интерфейса."""
+        def predict(self, X):
+            # Логика: чем выше возраст и образование, тем больше шансов
+            preds = []
+            for sample in X:
+                age, education_num = sample[0], sample[4]  # age, education-num
+                prob = min(0.3 + (age/100) + (education_num/20), 0.95)
+                preds.append(1 if np.random.random() < prob else 0)
+            return np.array(preds)
+        
+        def predict_proba(self, X):
+            prob_high = []
+            for sample in X:
+                age, education_num = sample[0], sample[4]
+                prob = min(0.3 + (age/100) + (education_num/20), 0.95)
+                prob_high.append(prob)
+            prob_high = np.array(prob_high).reshape(-1, 1)
+            return np.hstack([1 - prob_high, prob_high])
+    
+    # 3. Создаём и наполняем ресурсы
+    resources['model'] = DemoModel()
+    resources['scaler'] = StandardScaler()  # Пустой, для совместимости
+    resources['encoder'] = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
+    
+    resources['features_info'] = {
+        'numeric_features': ['age', 'fnlwgt', 'education-num', 'capital-gain', 'capital-loss', 'hours-per-week'],
+        'categorical_features': ['workclass', 'education', 'marital-status', 'occupation', 'relationship', 'race', 'sex'],
+        'all_features': []
+    }
+    
+    resources['categorical_options'] = {
+        'sex': ['Male', 'Female'],
+        'race': ['White', 'Black', 'Asian-Pac-Islander', 'Amer-Indian-Eskimo', 'Other'],
+        'education': ['Bachelors', 'Some-college', 'HS-grad', 'Masters'],
+        'marital-status': ['Never-married', 'Married-civ-spouse', 'Divorced'],
+        'relationship': ['Not-in-family', 'Husband', 'Wife', 'Own-child'],
+        'workclass': ['Private', 'Self-emp-not-inc', 'Federal-gov'],
+        'occupation': ['Prof-specialty', 'Craft-repair', 'Exec-managerial']
+    }
+    
+    resources['loaded'] = True
+    resources['message'] = "✅ Демо-ресурсы успешно созданы.\n"
+    
+    return resources
+
 # =============================================
 # УНИВЕРСАЛЬНЫЙ ЗАГРУЗЧИК ДЛЯ STREAMLIT CLOUD
 # =============================================
