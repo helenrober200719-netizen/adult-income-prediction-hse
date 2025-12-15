@@ -10,6 +10,66 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # =============================================
+# УНИВЕРСАЛЬНЫЙ ЗАГРУЗЧИК ДЛЯ STREAMLIT CLOUD
+# =============================================
+import sys
+import numpy as np
+
+# Создаем полную совместимую среду
+def setup_compatibility():
+    """Настройка совместимости для загрузки старых моделей"""
+    
+    # 1. Фиктивный numpy.random._mt19937
+    if 'numpy.random._mt19937' not in sys.modules:
+        class FakeMt19937Module:
+            class MT19937:
+                def __new__(cls, *args, **kwargs):
+                    return np.random.MT19937(*args, **kwargs)
+        sys.modules['numpy.random._mt19937'] = FakeMt19937Module
+    
+    # 2. Фиктивный numpy._core
+    if not hasattr(np, '_core'):
+        class FakeNumpyCore:
+            def __getattr__(self, name):
+                return getattr(np.core, name)
+        np._core = FakeNumpyCore()
+        sys.modules['numpy._core'] = np._core
+    
+    # 3. Фиктивный sklearn.ensemble._gb
+    if 'sklearn.ensemble._gb' not in sys.modules:
+        import sklearn.ensemble
+        sys.modules['sklearn.ensemble._gb'] = sklearn.ensemble._gb
+    
+    return True
+
+# Применяем настройку
+setup_compatibility()
+
+# Патчим pickle
+import pickle
+
+class UniversalUnpickler(pickle.Unpickler):
+    """Универсальный Unpickler для всех версий numpy"""
+    
+    def find_class(self, module, name):
+        # Исправляем все известные проблемы
+        if module == 'numpy.random._mt19937' and name == 'MT19937':
+            return np.random.MT19937
+        
+        if module.startswith('numpy._core'):
+            module = module.replace('numpy._core', 'numpy.core')
+        
+        if module == 'numpy.core._multiarray_umath':
+            module = 'numpy.core.multiarray._multiarray_umath'
+        
+        return super().find_class(module, name)
+
+# Устанавливаем наш Unpickler как стандартный
+pickle.Unpickler = UniversalUnpickler
+
+print("✅ Универсальный загрузчик активирован")
+
+# =============================================
 # СЛОВАРИ ПЕРЕВОДА
 # =============================================
 TRANSLATION_DICT = {
